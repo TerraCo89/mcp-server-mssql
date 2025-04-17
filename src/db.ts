@@ -1,4 +1,4 @@
-import * as sql from 'mssql';
+import sql from 'mssql';
 // Removed Profile import as it's no longer needed
 import { logger } from './logger.js'; // Add .js
 
@@ -41,8 +41,11 @@ export async function connectToDb(): Promise<sql.ConnectionPool> {
         throw new Error(`Invalid MSSQL_PORT: ${portEnv}. Must be a number.`);
     }
 
-    const encrypt = encryptEnv ? encryptEnv.toLowerCase() === 'true' : true;
-    const trustServerCertificate = trustServerCertificateEnv ? trustServerCertificateEnv.toLowerCase() === 'true' : false;
+    // Parse encrypt and trustServerCertificate settings
+    const encrypt = encryptEnv ? encryptEnv.toLowerCase() === 'true' : false; // Default to false for dev
+    const trustServerCertificate = trustServerCertificateEnv ? trustServerCertificateEnv.toLowerCase() === 'true' : true; // Default to true for dev
+
+    logger.info(`Using connection settings: encrypt=${encrypt}, trustServerCertificate=${trustServerCertificate}`);
 
     const config: sql.config = {
         user: user,
@@ -53,7 +56,8 @@ export async function connectToDb(): Promise<sql.ConnectionPool> {
         ...(driver && { driver: driver }), // Conditionally add driver if provided
         options: {
             encrypt: encrypt,
-            trustServerCertificate: trustServerCertificate
+            trustServerCertificate: trustServerCertificate,
+            enableArithAbort: true
         },
         pool: {
             max: 10, // Example pool configuration

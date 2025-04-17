@@ -1,0 +1,24 @@
+[INFO] Logger initialized in MCP mode
+[INFO] Starting MSSQL MCP Server...
+[INFO] Process arguments: ["C:\\nvm4w\\nodejs\\node.exe","D:\\source\\cernjarvis\\mcp-server-mssql\\dist\\server.js","--stdio"]
+[INFO] Node version: v20.18.1
+[INFO] Current directory: D:\source\cernjarvis\mcp-server-mssql
+[INFO] Stdio status - stdin.isTTY: undefined, stdout.isTTY: true
+[INFO] Using connection settings: encrypt=false, trustServerCertificate=true
+[INFO] Attempting to connect to database: master on server: localhost:1433 as user: sa
+[INFO] Received stdin data: {"jsonrpc":"2.0","method":"ListTools","id":1,"params":{}}
+
+[INFO] stdin stream ended
+[INFO] stdin stream closed
+[INFO] Successfully connected to database: master
+[INFO] Initial database connection pool established.
+[INFO] Creating StdioServerTransport
+[INFO] Setting up MCP handlers
+[INFO] Creating MCP server instance
+[INFO] Starting MCP server
+[INFO] MSSQL MCP Server started and listening for input...
+[DEBUG] Server heartbeat - still alive
+[DEBUG] Server heartbeat - still alive
+[DEBUG] Server heartbeat - still alive
+[DEBUG] Server heartbeat - still alive
+[DEBUG] Server heartbeat - still alive

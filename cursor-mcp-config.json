@@ -1,0 +1,21 @@
+{
+  "mssql": {
+    "command": "cmd",
+    "args": [
+      "/c",
+      "node",
+      "D:/source/cernjarvis/mcp-server-mssql/dist/server.js",
+      "--stdio"
+    ],
+    "env": {
+      "MSSQL_HOST": "localhost",
+      "MSSQL_PORT": "1433",
+      "MSSQL_USER": "sa",
+      "MSSQL_PASSWORD": "SqlServer2019!",
+      "MSSQL_DATABASE": "master",
+      "MSSQL_ENCRYPT": "false",
+      "MSSQL_TRUST_SERVER_CERTIFICATE": "true",
+      "LOG_LEVEL": "info"
+    }
+  }
+} 

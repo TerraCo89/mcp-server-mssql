@@ -1,12 +1,55 @@
+#!/usr/bin/env node
+
 // Import SDK modules needed for the MCP server
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { CallToolRequest, ListToolsRequest } from "@modelcontextprotocol/sdk/types.js"; // Import actual types
+import {
+  CallToolRequestSchema,
+  ListToolsRequestSchema,
+} from "@modelcontextprotocol/sdk/types.js";
+// Import dotenv for environment variables
+import * as dotenv from 'dotenv';
+// Load environment variables from .env file
+dotenv.config();
 // Keep other imports
-import * as sql from 'mssql';
+import sql from 'mssql';
 // Removed profileManager imports
-import { connectToDb } from './db.js';
-import { logger } from './logger.js';
+import { connectToDb, closePool } from './db.js';
+
+// Check if running in MCP mode
+const isMcpMode = process.argv.includes('--stdio');
+
+// Silent logger that doesn't interfere with JSON-RPC over stdio
+const logger = {
+  info: (msg: string) => {
+    if (!isMcpMode) {
+      console.info(msg);
+    } else if (process.env.DEBUG === 'true') {
+      console.error(`[INFO] ${msg}`);
+    }
+  },
+  warn: (msg: string) => {
+    if (!isMcpMode) {
+      console.warn(msg);
+    } else if (process.env.DEBUG === 'true') {
+      console.error(`[WARN] ${msg}`);
+    }
+  },
+  error: (msg: string, err?: any) => {
+    if (!isMcpMode) {
+      console.error(msg, err || '');
+    } else if (process.env.DEBUG === 'true') {
+      console.error(`[ERROR] ${msg} ${err ? JSON.stringify(err) : ''}`);
+    }
+  },
+  debug: (msg: string) => {
+    if (!isMcpMode && process.env.DEBUG === 'true') {
+      console.debug(msg);
+    } else if (isMcpMode && process.env.DEBUG === 'true') {
+      console.error(`[DEBUG] ${msg}`);
+    }
+  }
+};
 
 // Define Tool Argument Schemas
 // Removed AddConnectionProfileArgs and ProfileNameArgs interfaces
@@ -231,7 +274,7 @@ async function closePoolSafely(pool: sql.ConnectionPool | null, context: string)
  * Lists user tables in the database.
  */
 export async function list_tables(args: ListTablesArgs): Promise<string[]> {
-    logger.info(`Listing tables, schema: ${args.schema ?? 'all'}`);
+    logger.debug(`Listing tables, schema: ${args.schema ?? 'all'}`);
     let pool: sql.ConnectionPool | null = null;
     try {
         // Removed profile loading and password retrieval
@@ -248,13 +291,13 @@ export async function list_tables(args: ListTablesArgs): Promise<string[]> {
         query += ` ORDER BY TABLE_NAME;`;
         const result = await request.query(query);
         const tableNames = result.recordset.map(row => row.TABLE_NAME);
-        logger.info(`Found tables: ${tableNames.join(', ')}`);
+        logger.debug(`Found tables: ${tableNames.join(', ')}`);
         return tableNames;
     } catch (error: any) {
         logger.error(`Error in list_tables:`, error);
         throw error; // Re-throw the error to be handled by the caller/SDK
     } finally {
-        await closePoolSafely(pool, `list_tables`); // Removed profile name from context
+        await closePool(pool);
     }
 }
 
@@ -262,7 +305,7 @@ export async function list_tables(args: ListTablesArgs): Promise<string[]> {
  * Retrieves the schema for a specified table.
  */
 export async function get_table_schema(args: GetTableSchemaArgs): Promise<Record<string, any>[]> {
-    logger.info(`Getting schema for table: ${args.schema ?? 'default'}.${args.table_name}`);
+    logger.debug(`Getting schema for table: ${args.schema ?? 'default'}.${args.table_name}`);
     let pool: sql.ConnectionPool | null = null;
     try {
         // Removed profile loading and password retrieval
@@ -282,13 +325,13 @@ export async function get_table_schema(args: GetTableSchemaArgs): Promise<Record
         }
         query += ` ORDER BY ORDINAL_POSITION;`;
         const result = await request.query(query);
-        logger.info(`Schema retrieved successfully for table "${args.table_name}"`);
+        logger.debug(`Schema retrieved successfully for table "${args.table_name}"`);
         return result.recordset;
     } catch (error: any) {
         logger.error(`Error in get_table_schema for table "${args.table_name}":`, error);
         throw error; // Re-throw the error
     } finally {
-        await closePoolSafely(pool, `get_table_schema table "${args.table_name}"`); // Removed profile name
+        await closePool(pool);
     }
 }
 
@@ -296,7 +339,7 @@ export async function get_table_schema(args: GetTableSchemaArgs): Promise<Record
  * Reads rows from a specified table with filtering and pagination.
  */
 export async function read_table_rows(args: ReadTableRowsArgs): Promise<Record<string, any>[]> {
-    logger.info(`Reading rows from table: ${args.table_name}`);
+    logger.debug(`Reading rows from table: ${args.table_name}`);
     let pool: sql.ConnectionPool | null = null;
     try {
         // Removed profile loading and password retrieval
@@ -376,13 +419,13 @@ export async function read_table_rows(args: ReadTableRowsArgs): Promise<Record<s
 
         logger.debug(`Executing query: ${query}`);
         const result = await request.query(query);
-        logger.info(`Read ${result.recordset.length} rows successfully.`);
+        logger.debug(`Read ${result.recordset.length} rows successfully.`);
         return result.recordset;
     } catch (error: any) {
         logger.error(`Error in read_table_rows for table "${args.table_name}":`, error);
         throw error; // Re-throw the error
     } finally {
-        await closePoolSafely(pool, `read_table_rows table "${args.table_name}"`); // Removed profile name
+        await closePool(pool);
     }
 }
 
@@ -390,7 +433,7 @@ export async function read_table_rows(args: ReadTableRowsArgs): Promise<Record<s
  * Inserts one or more new records into the specified table.
  */
 export async function create_table_records(args: CreateTableRecordsArgs): Promise<{ status: string; inserted_count: number; message?: string }> {
-    logger.info(`Creating ${args.records.length} records in table: ${args.table_name}`);
+    logger.debug(`Creating ${args.records.length} records in table: ${args.table_name}`);
     if (!args.records || args.records.length === 0) {
         // Throw error instead of returning object for consistency
         throw new Error('No records provided to insert.');
@@ -443,7 +486,7 @@ export async function create_table_records(args: CreateTableRecordsArgs): Promis
         const request = pool.request();
         const result = await request.bulk(table);
 
-        logger.info(`Bulk insert successful. ${result.rowsAffected} records inserted into "${args.table_name}".`);
+        logger.debug(`Bulk insert successful. ${result.rowsAffected} records inserted into "${args.table_name}".`);
         return { status: 'Success', inserted_count: result.rowsAffected };
 
     } catch (error: any) {
@@ -451,7 +494,7 @@ export async function create_table_records(args: CreateTableRecordsArgs): Promis
         // Re-throw the error for the SDK handler
         throw error;
     } finally {
-        await closePoolSafely(pool, `create_table_records table "${args.table_name}"`); // Removed profile name
+        await closePool(pool);
     }
 }
 
@@ -459,7 +502,7 @@ export async function create_table_records(args: CreateTableRecordsArgs): Promis
  * Updates existing records in the specified table.
  */
 export async function update_table_records(args: UpdateTableRecordsArgs): Promise<{ status: string; updated_count: number; message?: string }> {
-    logger.info(`Updating records in table: ${args.table_name}`);
+    logger.debug(`Updating records in table: ${args.table_name}`);
 
     if (!args.filters || Object.keys(args.filters).length === 0) {
         const msg = 'Filters are required for update operations to prevent accidental full table updates.';
@@ -502,7 +545,7 @@ export async function update_table_records(args: UpdateTableRecordsArgs): Promis
         const result = await request.query(query);
         const updatedCount = result.recordset[0]?.RowsAffected ?? 0; // @@ROWCOUNT returns result set
 
-        logger.info(`Update successful. ${updatedCount} records updated in "${args.table_name}".`);
+        logger.debug(`Update successful. ${updatedCount} records updated in "${args.table_name}".`);
         return { status: 'Success', updated_count: updatedCount };
 
     } catch (error: any) {
@@ -510,7 +553,7 @@ export async function update_table_records(args: UpdateTableRecordsArgs): Promis
         // Re-throw the error for the SDK handler
         throw error;
     } finally {
-        await closePoolSafely(pool, `update_table_records table "${args.table_name}"`); // Removed profile name
+        await closePool(pool);
     }
 } // Added missing closing brace
 
@@ -518,7 +561,7 @@ export async function update_table_records(args: UpdateTableRecordsArgs): Promis
  * Deletes records from the specified table based on filter criteria.
  */
 export async function delete_table_records(args: DeleteTableRecordsArgs): Promise<{ status: string; deleted_count: number; message?: string }> {
-    logger.info(`Deleting records from table: ${args.table_name}`);
+    logger.debug(`Deleting records from table: ${args.table_name}`);
 
     if (!args.filters || Object.keys(args.filters).length === 0) {
         const msg = 'Filters are required for delete operations to prevent accidental full table deletion.';
@@ -549,7 +592,7 @@ export async function delete_table_records(args: DeleteTableRecordsArgs): Promis
         const result = await request.query(query);
         const deletedCount = result.recordset[0]?.RowsAffected ?? 0;
 
-        logger.info(`Delete successful. ${deletedCount} records deleted from "${args.table_name}".`);
+        logger.debug(`Delete successful. ${deletedCount} records deleted from "${args.table_name}".`);
         return { status: 'Success', deleted_count: deletedCount };
 
     } catch (error: any) {
@@ -557,7 +600,7 @@ export async function delete_table_records(args: DeleteTableRecordsArgs): Promis
         // Re-throw the error for the SDK handler
         throw error;
     } finally {
-        await closePoolSafely(pool, `delete_table_records table "${args.table_name}"`); // Removed profile name
+        await closePool(pool);
     }
 }
 
@@ -574,100 +617,176 @@ const toolImplementations: Record<string, Function> = {
 };
 
 async function main() {
-    logger.info('Starting MSSQL MCP Server...');
-
-    // Initialize the connection pool at startup (optional, could also connect per request)
-    let mainPool: sql.ConnectionPool | null = null;
     try {
-        mainPool = await connectToDb();
-        logger.info('Initial database connection pool established.');
-    } catch (error) {
-        logger.error('Failed to establish initial database connection pool. Server cannot start.', error); // Use logger.error
-        process.exit(1); // Exit if initial connection fails
-    }
+        // Debug log - only to stderr
+        if (process.env.DEBUG === 'true') {
+            logger.error("Starting MSSQL MCP Server in debug mode");
+        }
 
-    // Ensure the pool is closed gracefully on exit
-    process.on('exit', async () => {
-        logger.info('Closing main database connection pool on exit.');
-        await closePoolSafely(mainPool, 'server exit');
-    });
-    process.on('SIGINT', async () => { // Handle Ctrl+C
-        logger.info('Received SIGINT, shutting down...');
-        process.exit(0);
-    });
-    process.on('SIGTERM', async () => { // Handle termination signal
-        logger.info('Received SIGTERM, shutting down...');
-        process.exit(0);
-    });
+        // Create server
+        const server = new Server(
+            {
+                name: "MSSQL",
+                version: "0.1.0",
+            },
+            {
+                capabilities: {
+                    tools: {},
+                },
+            }
+        );
 
-
-    // Correct Server constructor: new Server(transport, handlers)
-    const transport = new StdioServerTransport();
-    const handlers = {
-        // Handler for ListTools request
-        async ListTools(request: ListToolsRequest) { 
-            logger.info('Received ListTools request');
+        // Register list-tools handler
+        server.setRequestHandler(ListToolsRequestSchema, async () => {
             return {
-                tools: Object.keys(toolSchemas).map(toolName => ({
-                    name: toolName,
-                    description: toolDescriptions[toolName as keyof typeof toolDescriptions] || 'No description available.',
-                    inputSchema: toolSchemas[toolName as keyof typeof toolSchemas]
-                }))
+                tools: [
+                    {
+                        name: "list_tables",
+                        description: "Lists all tables in the database",
+                        inputSchema: {
+                            type: "object",
+                            properties: {
+                                schema: { type: "string", description: "Database schema name (optional)" }
+                            }
+                        }
+                    },
+                    {
+                        name: "get_table_schema",
+                        description: "Gets the schema of a specific table",
+                        inputSchema: {
+                            type: "object",
+                            properties: {
+                                table_name: { type: "string", description: "Name of the table" },
+                                schema: { type: "string", description: "Database schema name (optional)" }
+                            },
+                            required: ["table_name"]
+                        }
+                    },
+                    {
+                        name: "read_table_rows",
+                        description: "Reads rows from a table with optional filtering and pagination",
+                        inputSchema: {
+                            type: "object",
+                            properties: {
+                                table_name: { type: "string", description: "Name of the table" },
+                                columns: { 
+                                    type: "array", 
+                                    items: { type: "string" }, 
+                                    description: "Columns to select (optional, defaults to all)" 
+                                },
+                                filters: { 
+                                    type: "object", 
+                                    additionalProperties: { 
+                                        type: "object", 
+                                        properties: { 
+                                            operator: { type: "string" }, 
+                                            value: {} 
+                                        } 
+                                    }, 
+                                    description: "Filter conditions (optional)" 
+                                },
+                                limit: { type: "number", description: "Maximum number of rows to return (optional)" },
+                                offset: { type: "number", description: "Number of rows to skip (optional)" },
+                                order_by: { 
+                                    type: "object", 
+                                    additionalProperties: { 
+                                        type: "string", 
+                                        enum: ["ASC", "DESC"] 
+                                    }, 
+                                    description: "Ordering specification (optional)" 
+                                }
+                            },
+                            required: ["table_name"]
+                        }
+                    }
+                ]
             };
-        },
-        // Handler for CallTool request
-        async CallTool(request: CallToolRequest) {
-            // Correctly destructure toolName and input from request.params
-            const { name: toolName, arguments: input } = request.params;
-            logger.info(`Received CallTool request for: ${toolName}`);
-            logger.debug(`Tool input: ${JSON.stringify(input)}`);
+        });
 
-            const toolFunction = toolImplementations[toolName];
-
-            if (!toolFunction) {
-                logger.error(`Tool not found: ${toolName}`);
-                throw new Error(`Tool not found: ${toolName}`);
-            }
-
+        // Register call-tool handler
+        server.setRequestHandler(CallToolRequestSchema, async (request) => {
             try {
-                // Execute the tool function with the provided input (arguments)
-                // Ensure input is passed correctly, handle undefined if necessary
-                const result = await toolFunction(input ?? {}); // Pass empty object if input is undefined
-                logger.info(`Tool ${toolName} executed successfully.`);
-                logger.debug(`Tool output: ${JSON.stringify(result)}`);
-                return { output: result };
-            } catch (error: any) {
-                logger.error(`Error executing tool ${toolName}:`, error);
-                // Rethrow the error so the SDK can format it correctly for the client
-                throw error;
+                if (!request.params.arguments) {
+                    throw new Error("Arguments are required");
+                }
+
+                switch (request.params.name) {
+                    case "list_tables": {
+                        const args = request.params.arguments as Record<string, unknown>;
+                        
+                        // Create a typed object with only expected properties
+                        const typedArgs: ListTablesArgs = { 
+                            schema: typeof args.schema === 'string' ? args.schema : undefined
+                        };
+                        
+                        const result = await list_tables(typedArgs);
+                        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+                    }
+
+                    case "get_table_schema": {
+                        const args = request.params.arguments as Record<string, unknown>;
+                        if (typeof args.table_name !== 'string') {
+                            throw new Error("table_name is required and must be a string");
+                        }
+                        
+                        const typedArgs: GetTableSchemaArgs = {
+                            table_name: args.table_name,
+                            schema: typeof args.schema === 'string' ? args.schema : undefined
+                        };
+                        
+                        const result = await get_table_schema(typedArgs);
+                        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+                    }
+
+                    case "read_table_rows": {
+                        const args = request.params.arguments as Record<string, unknown>;
+                        if (typeof args.table_name !== 'string') {
+                            throw new Error("table_name is required and must be a string");
+                        }
+                        
+                        // Create a typed object with only expected properties
+                        const typedArgs: ReadTableRowsArgs = {
+                            table_name: args.table_name,
+                            columns: args.columns as string[] | undefined,
+                            filters: args.filters as Record<string, { operator: string; value: any }> | undefined,
+                            limit: typeof args.limit === 'number' ? args.limit : undefined,
+                            offset: typeof args.offset === 'number' ? args.offset : undefined,
+                            order_by: args.order_by as Record<string, 'ASC' | 'DESC'> | undefined
+                        };
+                        
+                        const result = await read_table_rows(typedArgs);
+                        return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+                    }
+
+                    default:
+                        throw new Error(`Unknown tool: ${request.params.name}`);
+                }
+            } catch (error) {
+                if (error instanceof Error) {
+                    throw new Error(error.message);
+                }
+                throw new Error('Unknown error occurred');
             }
-        }
-    };
+        });
 
-    // Create MCP server instance
-    const serverInfo = {
-        name: 'mcp-server-mssql',
-        version: '0.1.0', // TODO: Get version from package.json dynamically
-    };
-    const serverOptions = {
-        transport: transport,
-        handlers: handlers,
-        logger: logger,
-        // Add required capabilities object with correct structure
-        capabilities: {
-            tools: {}, // Indicate tool support with an empty object
-            logging: {} // Indicate logging support with an empty object
-            // Add other capabilities as needed (e.g., resources: {}, prompts: {})
+        // Connect to stdio
+        const transport = new StdioServerTransport();
+        await server.connect(transport);
+        
+        if (process.env.DEBUG === 'true') {
+            logger.error("MSSQL MCP Server running on stdio");
         }
-    };
-    const server = new Server(serverInfo, serverOptions);
-
-    logger.info('MSSQL MCP Server started and listening.');
-    // The server transport handles the main loop implicitly
+    } catch (error) {
+        if (process.env.DEBUG === 'true') {
+            logger.error("Error starting MSSQL MCP server:", error);
+        }
+        process.exit(1);
+    }
 }
 
-// Start the server
-main().catch(error => {
-    logger.error('Unhandled error during server startup:', error); // Use logger.error
+main().catch((error) => {
+    if (process.env.DEBUG === 'true') {
+        logger.error("Fatal error running server:", error);
+    }
     process.exit(1);
 });

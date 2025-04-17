@@ -20,8 +20,11 @@
   "license": "MIT",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.1",
+    "dotenv": "^16.5.0",
     "keytar": "^7.9.0",
-    "mssql": "^10.0.0"
+    "mssql": "^10.0.0",
+    "pino": "^9.6.0",
+    "pino-pretty": "^13.0.0"
   },
   "devDependencies": {
     "@types/jest": "^29.5.14",
