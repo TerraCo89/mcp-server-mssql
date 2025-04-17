@@ -1,32 +1,47 @@
-# Project Planning: MS SQL Server MCP Server
+# PLANNING: MSSQL MCP Server Refactor (Python to JS/TS)
 
-## High-Level Vision
-Create a robust and secure Model Context Protocol (MCP) server using Python and FastMCP to allow AI assistants (like Claude, GPT-4 within Cursor/Windsurf) to interact directly with an MS SQL Server database.
+## 1. Goal
 
-## Architecture
--   **Language:** Python 3.10+
--   **MCP Framework:** FastMCP
--   **Transport:** Stdio
--   **Database Library:** `pyodbc` (ensure required ODBC drivers for SQL Server are installed on the machine running the server)
--   **Configuration:** Database credentials managed via environment variables.
+Refactor the existing Python-based MSSQL MCP server to JavaScript/TypeScript to resolve Windows compatibility issues, particularly concerning authentication (`keyring`) and configuration file access (`profiles.json`). The new version will replace the Python implementation within this directory (`mcp-server-mssql`).
 
-## Constraints
--   The server must handle connection management securely.
--   Credentials must NOT be hardcoded.
--   Error handling should be implemented for database operations.
--   Tools should be clearly defined with comprehensive descriptions for the LLM.
+## 2. Core Requirements
 
-## Initial Scope (Tools to Implement)
-1.  **`read_table_rows`**: Read data from a specified table.
-2.  **`create_table_records`**: Insert one or more new records into a specified table.
-3.  **`update_table_records`**: Update existing records in a specified table based on filter criteria.
-4.  **`delete_table_records`**: Delete records from a specified table based on filter criteria.
-5.  **(Optional Future)** `list_tables`: List available tables in the database.
-6.  **(Optional Future)** `get_table_schema`: Get the schema (columns, types) for a specific table.
+*   Implement a fully functional MCP server using `@modelcontextprotocol/server`.
+*   Replicate all 9 existing tools with equivalent functionality.
+*   Implement secure profile management for connection details (driver, server, database, username).
+*   Implement secure password storage using the native Windows credential store (via `keytar`).
+*   Ensure reliable connectivity to MS SQL Server databases.
+*   Support configuration via environment variables (e.g., `MCP_PROFILES_DIR`).
+*   Prioritize robust operation and testing on Windows.
+*   Update documentation (`README.md`) for the new implementation.
 
-## Technology Stack
--   Python
--   FastMCP
--   pyodbc
--   python-dotenv (for loading environment variables locally)
--   (Testing) pytest, pytest-asyncio, unittest.mock
+## 3. Technology Choices
+
+*   **Language:** TypeScript
+*   **Runtime:** Node.js
+*   **MCP Framework:** `@modelcontextprotocol/server`
+*   **MSSQL Driver:** `mssql`
+*   **Secure Credential Storage:** `keytar`
+*   **Core Modules:** Node.js `fs`, `path`, `process`
+
+## 4. Implementation Phases
+
+1.  **Setup & Core Functionality:** Initialize project, install dependencies, set up basic server structure, implement core connection and profile/password handling.
+2.  **Tool Implementation:** Implement each of the 9 required MCP tools.
+3.  **Configuration & Testing:** Adapt environment variable handling, develop tests, and perform thorough testing on Windows (including Docker if applicable).
+4.  **Documentation & Cleanup:** Update `README.md`, remove Python artifacts, finalize planning documents, perform code review.
+
+## 5. Key Challenges & Considerations
+
+*   Ensuring `keytar` works reliably across different Windows environments for password storage/retrieval.
+*   Mapping `pyodbc` connection parameters and error handling to the `mssql` library.
+*   Maintaining compatibility with existing profile storage structure (`profiles.json`) or defining a clear migration path if the structure changes.
+*   Updating Docker configuration (`Dockerfile`) if Docker execution remains a requirement.
+
+## 6. Success Criteria
+
+*   The JS/TS server runs successfully on Windows without the previous authentication/config errors.
+*   All 9 tools function correctly against an MSSQL database.
+*   Connection profiles and passwords are managed securely.
+*   The server integrates correctly with the MCP client.
+*   The `README.md` accurately reflects the new implementation.

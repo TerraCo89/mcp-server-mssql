@@ -1,7 +1,0 @@
-mcp
-pyodbc
-python-dotenv
-pytest
-pytest-asyncio
-keyring
-keyrings.cryptfile
